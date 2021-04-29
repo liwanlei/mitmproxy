@@ -132,17 +132,20 @@ class APIError(tornado.web.HTTPError):
     pass
 
 
+#所有的handler的父类
 class RequestHandler(tornado.web.RequestHandler):
     application: "Application"
-
+    #写入
     def write(self, chunk):
         # Writing arrays on the top level is ok nowadays.
         # http://flask.pocoo.org/docs/0.11/security/#json-security
+        #如果是list，就返回
         if isinstance(chunk, list):
             chunk = tornado.escape.json_encode(chunk)
             self.set_header("Content-Type", "application/json; charset=UTF-8")
         super().write(chunk)
 
+    #设置默认的headers
     def set_default_headers(self):
         super().set_default_headers()
         self.set_header("Server", version.MITMPROXY)
@@ -165,6 +168,7 @@ class RequestHandler(tornado.web.RequestHandler):
         except Exception as e:
             raise APIError(400, "Malformed JSON: {}".format(str(e)))
 
+    #文件的内容
     @property
     def filecontents(self):
         """
@@ -242,6 +246,7 @@ class ClientConnection(WebSocketEventBroadcaster):
 
 class Flows(RequestHandler):
     def get(self):
+        #返回写入到 flows
         self.write([flow_to_json(f) for f in self.view])
 
 
