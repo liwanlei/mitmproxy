@@ -14,13 +14,13 @@ import tornado.websocket
 import mitmproxy.flow
 import mitmproxy.tools.web.master  # noqa
 from mitmproxy import contentviews
+from mitmproxy import exceptions
 from mitmproxy import flowfilter
 from mitmproxy import http
 from mitmproxy import io
 from mitmproxy import log
 from mitmproxy import optmanager
 from mitmproxy import version
-from mitmproxy.utils.strutils import always_str
 
 
 def flow_to_json(flow: mitmproxy.flow.Flow) -> dict:
@@ -34,40 +34,20 @@ def flow_to_json(flow: mitmproxy.flow.Flow) -> dict:
         "id": flow.id,
         "intercepted": flow.intercepted,
         "is_replay": flow.is_replay,
+        "client_conn": flow.client_conn.get_state(),
+        "server_conn": flow.server_conn.get_state(),
         "type": flow.type,
         "modified": flow.modified(),
         "marked": flow.marked,
     }
-
-    if flow.client_conn:
-        f["client_conn"] = {
-            "id": flow.client_conn.id,
-            "address": flow.client_conn.peername,
-            "tls_established": flow.client_conn.tls_established,
-            "timestamp_start": flow.client_conn.timestamp_start,
-            "timestamp_tls_setup": flow.client_conn.timestamp_tls_setup,
-            "timestamp_end": flow.client_conn.timestamp_end,
-            "sni": flow.client_conn.sni,
-            "cipher_name": flow.client_conn.cipher,
-            "alpn_proto_negotiated": always_str(flow.client_conn.alpn, "ascii", "backslashreplace"),
-            "tls_version": flow.client_conn.tls_version,
-        }
-
-    if flow.server_conn:
-        f["server_conn"] = {
-            "id": flow.server_conn.id,
-            "address": flow.server_conn.address,
-            "ip_address": flow.server_conn.peername,
-            "source_address": flow.server_conn.sockname,
-            "tls_established": flow.server_conn.tls_established,
-            "sni": flow.server_conn.sni,
-            "alpn_proto_negotiated": always_str(flow.client_conn.alpn, "ascii", "backslashreplace"),
-            "tls_version": flow.server_conn.tls_version,
-            "timestamp_start": flow.server_conn.timestamp_start,
-            "timestamp_tcp_setup": flow.server_conn.timestamp_tcp_setup,
-            "timestamp_tls_setup": flow.server_conn.timestamp_tls_setup,
-            "timestamp_end": flow.server_conn.timestamp_end,
-        }
+    # .alpn_proto_negotiated is bytes, we need to decode that.
+    for conn in "client_conn", "server_conn":
+        if f[conn]["alpn_proto_negotiated"] is None:
+            continue
+        f[conn]["alpn_proto_negotiated"] = \
+            f[conn]["alpn_proto_negotiated"].decode(errors="backslashreplace")
+    # There are some bytes in here as well, let's skip it until we have them in the UI.
+    f["client_conn"].pop("tls_extensions", None)
     if flow.error:
         f["error"] = flow.error.get_state()
 
@@ -117,15 +97,10 @@ def flow_to_json(flow: mitmproxy.flow.Flow) -> dict:
             if flow.response.data.trailers:
                 f["response"]["trailers"] = tuple(flow.response.data.trailers.items(True))
 
-<<<<<<< HEAD
-=======
     f.get("server_conn", {}).pop("certificate_list", None)
     f.get("client_conn", {}).pop("certificate_list", None)
     f.get("client_conn", {}).pop("mitmcert", None)
-    f.get("server_conn", {}).pop("alpn_offers", None)
-    f.get("client_conn", {}).pop("alpn_offers", None)
 
->>>>>>> 0407ce310
     return f
 
 
@@ -141,20 +116,17 @@ class APIError(tornado.web.HTTPError):
     pass
 
 
-#所有的handler的父类
 class RequestHandler(tornado.web.RequestHandler):
     application: "Application"
-    #写入
+
     def write(self, chunk):
         # Writing arrays on the top level is ok nowadays.
         # http://flask.pocoo.org/docs/0.11/security/#json-security
-        #如果是list，就返回
         if isinstance(chunk, list):
             chunk = tornado.escape.json_encode(chunk)
             self.set_header("Content-Type", "application/json; charset=UTF-8")
         super().write(chunk)
 
-    #设置默认的headers
     def set_default_headers(self):
         super().set_default_headers()
         self.set_header("Server", version.MITMPROXY)
@@ -177,7 +149,6 @@ class RequestHandler(tornado.web.RequestHandler):
         except Exception as e:
             raise APIError(400, "Malformed JSON: {}".format(str(e)))
 
-    #文件的内容
     @property
     def filecontents(self):
         """
@@ -255,7 +226,6 @@ class ClientConnection(WebSocketEventBroadcaster):
 
 class Flows(RequestHandler):
     def get(self):
-        #返回写入到 flows
         self.write([flow_to_json(f) for f in self.view])
 
 
@@ -388,7 +358,14 @@ class RevertFlow(RequestHandler):
 
 class ReplayFlow(RequestHandler):
     def post(self, flow_id):
-        self.master.commands.call("replay.client", [self.flow])
+        self.flow.backup()
+        self.flow.response = None
+        self.view.update([self.flow])
+
+        try:
+            self.master.commands.call("replay.client", [self.flow])
+        except exceptions.ReplayException as e:
+            raise APIError(400, str(e))
 
 
 class FlowContent(RequestHandler):
