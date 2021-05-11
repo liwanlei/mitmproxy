@@ -67,9 +67,24 @@ If you depend on these features, please raise your voice in
 
 ## 13 December 2020: mitmproxy 6.0.1
 
+<<<<<<< HEAD:CHANGELOG.md
 * Fix flow serialization in mitmweb.
 
 ## 13 December 2020: mitmproxy 6.0
+=======
+15 December 2020: mitmproxy 6.0.2
+=================================
+
+* Fix reading of saved flows in mitmweb.
+
+13 December 2020: mitmproxy 6.0.1
+=================================
+
+* Fix flow serialization in mitmweb.
+
+13 December 2020: mitmproxy 6.0
+===============================
+>>>>>>> 0407ce310:CHANGELOG.rst
 
 * Mitmproxy now requires Python 3.8 or above.
 * Deprecation of pathod and pathoc tools and modules. Future releases will not contain them! (@Kriechi)

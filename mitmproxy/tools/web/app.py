@@ -117,6 +117,15 @@ def flow_to_json(flow: mitmproxy.flow.Flow) -> dict:
             if flow.response.data.trailers:
                 f["response"]["trailers"] = tuple(flow.response.data.trailers.items(True))
 
+<<<<<<< HEAD
+=======
+    f.get("server_conn", {}).pop("certificate_list", None)
+    f.get("client_conn", {}).pop("certificate_list", None)
+    f.get("client_conn", {}).pop("mitmcert", None)
+    f.get("server_conn", {}).pop("alpn_offers", None)
+    f.get("client_conn", {}).pop("alpn_offers", None)
+
+>>>>>>> 0407ce310
     return f
 
 
